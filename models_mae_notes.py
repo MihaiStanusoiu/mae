@@ -33,7 +33,7 @@ class MaskedAutoencoderViT(nn.Module):
         self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
         num_patches = self.patch_embed.num_patches
 
-        # self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim), requires_grad=False)  # fixed sin-cos embedding
 
         self.blocks = nn.ModuleList([
@@ -78,7 +78,7 @@ class MaskedAutoencoderViT(nn.Module):
         torch.nn.init.xavier_uniform_(w.view([w.shape[0], -1]))
 
         # timm's trunc_normal_(std=.02) is effectively normal_(std=0.02) as cutoff is too big (2.)
-        # torch.nn.init.normal_(self.cls_token, std=.02)
+        torch.nn.init.normal_(self.cls_token, std=.02)
         torch.nn.init.normal_(self.mask_token, std=.02)
 
         # initialize nn.Linear and nn.LayerNorm
@@ -150,51 +150,89 @@ class MaskedAutoencoderViT(nn.Module):
         return x_masked, mask, ids_restore
 
     def forward_encoder(self, x, mask_ratio):
+        print('------------- start encoder -------------')
+        print('- input image:', x.shape)
+
+        print('\n==> embed patches')
         # embed patches
         x = self.patch_embed(x)
+        print('x.shape:', x.shape)
 
+        print('\n==> add position embedding')
         # add pos embed w/o cls token
         x = x + self.pos_embed[:, 1:, :]
+        print('x.shape:', x.shape)
 
+        print('\n==> mask patches')
         # masking: length -> length * mask_ratio
         x, mask, ids_restore = self.random_masking(x, mask_ratio)
+        print('x.shape:', x.shape)
+        print('mask.shape:', mask.shape)
+        print('ids_restore.shape:', ids_restore.shape)
 
+        print('\n==> append class token')
         # append cls token
-        # cls_token = self.cls_token + self.pos_embed[:, :1, :]
-        # cls_tokens = cls_token.expand(x.shape[0], -1, -1)
-        # x = torch.cat((cls_tokens, x), dim=1)
+        cls_token = self.cls_token + self.pos_embed[:, :1, :]
+        cls_tokens = cls_token.expand(x.shape[0], -1, -1)
+        x = torch.cat((cls_tokens, x), dim=1)
+        print('x.shape:', x.shape)
 
         # apply Transformer blocks
+        print('\n==> apply transformer blocks')
         for blk in self.blocks:
             x = blk(x)
+            print('x.shape:', x.shape)
         x = self.norm(x)
+
+        print('------------- end encoder -------------')
+        print('x.shape:', x.shape)
+        print('mask.shape:', mask.shape)
+        print('ids_restore.shape:', ids_restore.shape)
 
         return x, mask, ids_restore
 
     def forward_decoder(self, x, ids_restore):
+        print('\n------------- start decoder -------------')
+        print('x.shape:', x.shape)
+        print('ids_restore.shape:', ids_restore.shape)
+
+        print('\n==> embed tokens')
         # embed tokens
         x = self.decoder_embed(x)
+        print('x.shape:', x.shape)
 
+        print('\n==> append mask tokens to sequence')
         # append mask tokens to sequence
         mask_tokens = self.mask_token.repeat(x.shape[0], ids_restore.shape[1] + 1 - x.shape[1], 1)
         x_ = torch.cat([x[:, 1:, :], mask_tokens], dim=1)  # no cls token
         x_ = torch.gather(x_, dim=1, index=ids_restore.unsqueeze(-1).repeat(1, 1, x.shape[2]))  # unshuffle
         x = torch.cat([x[:, :1, :], x_], dim=1)  # append cls token
+        print('x.shape:', x.shape)
 
+        print('\n==> add position embedding')
         # add pos embed
         x = x + self.decoder_pos_embed
+        print('x.shape:', x.shape)
 
+        print('\n==> apply transformer blocks')
         # apply Transformer blocks
         for blk in self.decoder_blocks:
             x = blk(x)
+            print('x.shape:', x.shape)
         x = self.decoder_norm(x)
 
+        print('\n==> predictor projection')
         # predictor projection
         x = self.decoder_pred(x)
+        print('x.shape:', x.shape)
 
+        print('\n==> predictor projection')
         # remove cls token
         x = x[:, 1:, :]
+        print('x.shape:', x.shape)
 
+        print('------------- end decoder -------------')
+        print('x.shape:', x.shape)
         return x
 
     def forward_loss(self, imgs, pred, mask):
@@ -203,16 +241,28 @@ class MaskedAutoencoderViT(nn.Module):
         pred: [N, L, p*p*3]
         mask: [N, L], 0 is keep, 1 is remove, 
         """
+        print('\n------------- start loss function -------------')
+        print('imgs.shape:', imgs.shape)
+        print('pred.shape:', pred.shape)
+        print('mask.shape:', mask.shape)
+
+        print('\n==> put original images into patches')
         target = self.patchify(imgs)
-        if self.norm_pix_loss:
-            mean = target.mean(dim=-1, keepdim=True)
-            var = target.var(dim=-1, keepdim=True)
-            target = (target - mean) / (var + 1.e-6)**.5
+        print('target.shape:', target.shape)
 
+        # if self.norm_pix_loss:
+        #     mean = target.mean(dim=-1, keepdim=True)
+        #     var = target.var(dim=-1, keepdim=True)
+        #     target = (target - mean) / (var + 1.e-6)**.5
+
+        print('\n==> calculate loss function')
         loss = (pred - target) ** 2
+        print('loss.shape:', loss.shape)
         loss = loss.mean(dim=-1)  # [N, L], mean loss per patch
-
+        print('loss.shape:', loss.shape)
+        print('mask:', mask)
         loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches
+        print('loss:', loss)
         return loss
 
     def forward(self, imgs, mask_ratio=0.75):
@@ -250,3 +300,15 @@ def mae_vit_huge_patch14_dec512d8b(**kwargs):
 mae_vit_base_patch16 = mae_vit_base_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
 mae_vit_large_patch16 = mae_vit_large_patch16_dec512d8b  # decoder: 512 dim, 8 blocks
 mae_vit_huge_patch14 = mae_vit_huge_patch14_dec512d8b  # decoder: 512 dim, 8 blocks
+
+
+if __name__ == '__main__':
+    model = MaskedAutoencoderViT(
+        patch_size=16, embed_dim=256, depth=6, num_heads=8,
+        decoder_embed_dim=128, decoder_depth=1, decoder_num_heads=8,
+        mlp_ratio=4, norm_layer=partial(nn.LayerNorm, eps=1e-6))
+    x = torch.randn([1, 3, 224, 224])
+    model(x, 0.75)
+
+    # print('-- model:')
+    # print(model)

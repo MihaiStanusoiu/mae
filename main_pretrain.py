@@ -24,7 +24,7 @@ import torchvision.datasets as datasets
 
 import timm
 
-assert timm.__version__ == "0.3.2"  # version check
+# assert timm.__version__ == "0.3.2"  # version check
 import timm.optim.optim_factory as optim_factory
 
 import util.misc as misc
@@ -37,7 +37,9 @@ from engine_pretrain import train_one_epoch
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
-    parser.add_argument('--batch_size', default=64, type=int,
+    # parser.add_argument('--batch_size', default=64, type=int,
+    #                     help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
+    parser.add_argument('--batch_size', default=2, type=int,
                         help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
     parser.add_argument('--epochs', default=400, type=int)
     parser.add_argument('--accum_iter', default=1, type=int,
@@ -72,14 +74,18 @@ def get_args_parser():
                         help='epochs to warmup LR')
 
     # Dataset parameters
-    parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
+    # parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
+    #                     help='dataset path')
+    parser.add_argument('--data_path', default='./dataset/', type=str,
                         help='dataset path')
 
     parser.add_argument('--output_dir', default='./output_dir',
                         help='path where to save, empty for no saving')
     parser.add_argument('--log_dir', default='./output_dir',
                         help='path where to tensorboard log')
-    parser.add_argument('--device', default='cuda',
+    # parser.add_argument('--device', default='cuda',
+    #                     help='device to use for training / testing')
+    parser.add_argument('--device', default='cpu',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=0, type=int)
     parser.add_argument('--resume', default='',
@@ -176,7 +182,10 @@ def main(args):
         model_without_ddp = model.module
     
     # following timm: set wd as 0 for bias and norm layers
-    param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
+    # for timm==0.3.2
+    # param_groups = optim_factory.add_weight_decay(model_without_ddp, args.weight_decay)
+    # for newest timm version
+    param_groups = optim_factory.param_groups_weight_decay(model_without_ddp, args.weight_decay)
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
     print(optimizer)
     loss_scaler = NativeScaler()
