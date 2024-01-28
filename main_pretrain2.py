@@ -34,83 +34,6 @@ import models_mae
 
 from engine_pretrain import train_one_epoch
 
-from PIL import Image
-
-# Disable CUDA and suppress warning on non-NVIDIA GPUs (e.g., Apple Silicon)
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-
-
-class CustomDataset(torch.utils.data.Dataset):
-    def __init__(self, data_path, transform=None):
-        self.data_path = data_path
-        self.transform = transform
-        self.image_paths = self._load_image_paths()
-
-    def _load_image_paths(self):
-        # Assuming your dataset has a structure like train/foldername/images
-        image_paths = []
-        for folder_name in os.listdir(self.data_path):
-            folder_path = os.path.join(self.data_path, folder_name)
-            if os.path.isdir(folder_path):
-                images_folder = os.path.join(folder_path, 'images')
-                if os.path.exists(images_folder) and os.path.isdir(images_folder):
-                    image_paths.extend([os.path.join(images_folder, image) for image in os.listdir(images_folder)])
-        return image_paths
-
-    def __len__(self):
-        return len(self.image_paths)
-
-    def __getitem__(self, index):
-        img_path = self.image_paths[index]
-
-        # Skip directories
-        if os.path.isdir(img_path):
-            print(f"Skipping directory: {img_path}")
-            return self.__getitem__((index + 1) % len(self))  # Move to the next item
-
-        image = Image.open(img_path).convert('L')  # Convert to grayscale
-
-        if self.transform is not None:
-            image = self.transform(image)
-
-        # Ensure the image has a single channel
-        if image.shape[0] != 1:
-            image = image[0:1, :, :]
-
-        return image
-
-
-class CustomResizedCrop(transforms.Resize):
-    def __init__(self, size, scale=(0.2, 1.0), interpolation=3):
-        super().__init__(size, interpolation)
-        self.scale = scale
-
-    def __call__(self, img):
-        # Apply random resized crop
-        i, j, h, w = transforms.RandomResizedCrop.get_params(
-            img, scale=self.scale, ratio=(1, 1)
-        )
-        return transforms.functional.resized_crop(
-            img, i, j, h, w, self.size, self.interpolation
-        )
-
-
-class CustomToTensor(transforms.ToTensor):
-    def __call__(self, img):
-        # Apply ToTensor and ensure single channel
-        img = super().__call__(img)
-        if img.shape[0] != 1:
-            img = img[0:1, :, :]
-        return img
-
-
-class CustomHorizontalFlip(transforms.RandomHorizontalFlip):
-    def __call__(self, img):
-        # Apply random horizontal flip
-        if torch.rand(1) < self.p:
-            return transforms.functional.hflip(img)
-        return img
-
 
 def get_args_parser():
     parser = argparse.ArgumentParser('MAE pre-training', add_help=False)
@@ -126,7 +49,7 @@ def get_args_parser():
     parser.add_argument('--model', default='mae_vit_large_patch16', type=str, metavar='MODEL',
                         help='Name of model to train')
 
-    parser.add_argument('--input_size', default=640, type=int,
+    parser.add_argument('--input_size', default=224, type=int,
                         help='images input size')
 
     parser.add_argument('--mask_ratio', default=0.75, type=float,
@@ -153,7 +76,7 @@ def get_args_parser():
     # Dataset parameters
     # parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
     #                     help='dataset path')
-    parser.add_argument('--data_path', default='./', type=str,
+    parser.add_argument('--data_path', default='./dataset/', type=str,
                         help='dataset path')
 
     parser.add_argument('--output_dir', default='./output_dir',
@@ -204,12 +127,11 @@ def main(args):
 
     # simple augmentation
     transform_train = transforms.Compose([
-        CustomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),
-        CustomHorizontalFlip(p=0.5),
-        CustomToTensor(),
-        transforms.Normalize(mean=[0.5], std=[0.5])
-    ])
-    dataset_train = CustomDataset(data_path=os.path.join(args.data_path, 'train'), transform=transform_train)
+        transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+    dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
     print(dataset_train)
 
     if True:  # args.distributed:
