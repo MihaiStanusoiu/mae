@@ -329,6 +329,7 @@ mae_vit_huge_patch14 = mae_vit_huge_patch14_dec512d8b  # decoder: 512 dim, 8 blo
 
 
 if __name__ == '__main__':
+    #could do embed_dim = 20, depth = 1
     model = MaskedAutoencoderViT(
         patch_size=16, embed_dim=256, depth=6, num_heads=8,
         decoder_embed_dim=128, decoder_depth=1, decoder_num_heads=8,

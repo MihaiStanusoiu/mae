@@ -27,96 +27,13 @@ import timm
 # assert timm.__version__ == "0.3.2"  # version check
 import timm.optim.optim_factory as optim_factory
 
+import dataset
 import util.misc as misc
 from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
 import models_mae
 
 from engine_pretrain import train_one_epoch
-
-from PIL import Image
-
-from skimage import io, transform
-import torchvision.transforms.functional as F  # Add this line
-
-
-class CustomResizedCrop(object):
-    def __init__(self, output_size, scale=(0.2, 1.0), interpolation=3):
-        self.output_size = output_size
-        self.scale = scale
-        self.interpolation = interpolation
-
-    def __call__(self, image):
-        # Random Resized Crop
-        size = int(self.scale[0] * min(image.size) + 0.5)
-        crop_params = F.resized_crop(image, 0, 0, size, size, self.output_size, self.interpolation)
-
-        return crop_params
-
-
-class CustomHorizontalFlip(object):
-    def __init__(self, p=0.5):
-        self.p = p
-
-    def __call__(self, image):
-        # Random Horizontal Flip
-        if torch.rand(1) < self.p:
-            return F.hflip(image)
-        return image
-
-
-class CustomToTensor(object):
-    def __call__(self, image):
-        # Convert to Tensor
-        return F.to_tensor(image)
-
-
-class CustomNormalize(object):
-    def __init__(self, mean, std):
-        self.mean = mean
-        self.std = std
-
-    def __call__(self, tensor):
-        # Normalize
-        return F.normalize(tensor, self.mean, self.std)
-
-
-class CustomDataset(torch.utils.data.Dataset):
-    def __init__(self, data_path, transform=None):
-        self.data_path = data_path
-        self.transform = transform
-        self.image_paths = self._load_image_paths()
-
-    def _load_image_paths(self):
-        image_paths = []
-        for folder_name in os.listdir(self.data_path):
-            folder_path = os.path.join(self.data_path, folder_name)
-            if os.path.isdir(folder_path):
-                images_folder = os.path.join(folder_path, 'images')
-                if os.path.exists(images_folder) and os.path.isdir(images_folder):
-                    image_paths.extend([os.path.join(images_folder, image) for image in os.listdir(images_folder)])
-        return image_paths
-
-    def __len__(self):
-        return len(self.image_paths)
-
-    def __getitem__(self, index):
-        img_path = self.image_paths[index]
-
-        if os.path.isdir(img_path):
-            print(f"Skipping directory: {img_path}")
-            return self.__getitem__((index + 1) % len(self))
-
-        image = Image.open(img_path).convert('L')  # Convert to grayscale
-
-        if self.transform is not None:
-            image = self.transform(image)
-
-        # Ensure the image has a single channel
-        if image.shape[0] != 1:
-            image = image[0:1, :, :]
-
-        return image
 
 
 def get_args_parser():
@@ -160,7 +77,7 @@ def get_args_parser():
     # Dataset parameters
     # parser.add_argument('--data_path', default='/datasets01/imagenet_full_size/061417/', type=str,
     #                     help='dataset path')
-    parser.add_argument('--data_path', default='./', type=str,
+    parser.add_argument('--data_path', default='./dataset/', type=str,
                         help='dataset path')
 
     parser.add_argument('--output_dir', default='./output_dir',
@@ -211,19 +128,13 @@ def main(args):
 
     # simple augmentation
     # transform_train = transforms.Compose([
-    #     CustomResizedCrop(output_size=640),
-    #     CustomHorizontalFlip(p=0.5),
-    #     CustomToTensor(),
-    #     CustomNormalize(mean=[0.5], std=[0.5])
-    # ])
-    transform_train = transforms.Compose([
-        transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485], std=[0.229])])
-
-    dataset_train = CustomDataset(data_path=os.path.join(args.data_path, 'train'), transform=transform_train)
-    print(dataset_train)
+    #     transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
+    #     transforms.RandomHorizontalFlip(),
+    #     transforms.ToTensor(),
+    #     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])
+    # dataset_train = datasets.ImageFolder(os.path.join(args.data_path, 'train'), transform=transform_train)
+    dataset_train = dataset.get_dataset(mode='train')
+    # print(dataset_train)
 
     if True:  # args.distributed:
         num_tasks = misc.get_world_size()
