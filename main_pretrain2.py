@@ -36,49 +36,8 @@ from engine_pretrain import train_one_epoch
 
 from PIL import Image
 
-from skimage import io, transform
-import torchvision.transforms.functional as F  # Add this line
-
-
-class CustomResizedCrop(object):
-    def __init__(self, output_size, scale=(0.2, 1.0), interpolation=3):
-        self.output_size = output_size
-        self.scale = scale
-        self.interpolation = interpolation
-
-    def __call__(self, image):
-        # Random Resized Crop
-        size = int(self.scale[0] * min(image.size) + 0.5)
-        crop_params = F.resized_crop(image, 0, 0, size, size, self.output_size, self.interpolation)
-
-        return crop_params
-
-
-class CustomHorizontalFlip(object):
-    def __init__(self, p=0.5):
-        self.p = p
-
-    def __call__(self, image):
-        # Random Horizontal Flip
-        if torch.rand(1) < self.p:
-            return F.hflip(image)
-        return image
-
-
-class CustomToTensor(object):
-    def __call__(self, image):
-        # Convert to Tensor
-        return F.to_tensor(image)
-
-
-class CustomNormalize(object):
-    def __init__(self, mean, std):
-        self.mean = mean
-        self.std = std
-
-    def __call__(self, tensor):
-        # Normalize
-        return F.normalize(tensor, self.mean, self.std)
+# Disable CUDA and suppress warning on non-NVIDIA GPUs (e.g., Apple Silicon)
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 
 class CustomDataset(torch.utils.data.Dataset):
@@ -88,6 +47,7 @@ class CustomDataset(torch.utils.data.Dataset):
         self.image_paths = self._load_image_paths()
 
     def _load_image_paths(self):
+        # Assuming your dataset has a structure like train/foldername/images
         image_paths = []
         for folder_name in os.listdir(self.data_path):
             folder_path = os.path.join(self.data_path, folder_name)
@@ -103,9 +63,10 @@ class CustomDataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         img_path = self.image_paths[index]
 
+        # Skip directories
         if os.path.isdir(img_path):
             print(f"Skipping directory: {img_path}")
-            return self.__getitem__((index + 1) % len(self))
+            return self.__getitem__((index + 1) % len(self))  # Move to the next item
 
         image = Image.open(img_path).convert('L')  # Convert to grayscale
 
@@ -117,6 +78,38 @@ class CustomDataset(torch.utils.data.Dataset):
             image = image[0:1, :, :]
 
         return image
+
+
+class CustomResizedCrop(transforms.Resize):
+    def __init__(self, size, scale=(0.2, 1.0), interpolation=3):
+        super().__init__(size, interpolation)
+        self.scale = scale
+
+    def __call__(self, img):
+        # Apply random resized crop
+        i, j, h, w = transforms.RandomResizedCrop.get_params(
+            img, scale=self.scale, ratio=(1, 1)
+        )
+        return transforms.functional.resized_crop(
+            img, i, j, h, w, self.size, self.interpolation
+        )
+
+
+class CustomToTensor(transforms.ToTensor):
+    def __call__(self, img):
+        # Apply ToTensor and ensure single channel
+        img = super().__call__(img)
+        if img.shape[0] != 1:
+            img = img[0:1, :, :]
+        return img
+
+
+class CustomHorizontalFlip(transforms.RandomHorizontalFlip):
+    def __call__(self, img):
+        # Apply random horizontal flip
+        if torch.rand(1) < self.p:
+            return transforms.functional.hflip(img)
+        return img
 
 
 def get_args_parser():
@@ -210,18 +203,12 @@ def main(args):
     cudnn.benchmark = True
 
     # simple augmentation
-    # transform_train = transforms.Compose([
-    #     CustomResizedCrop(output_size=640),
-    #     CustomHorizontalFlip(p=0.5),
-    #     CustomToTensor(),
-    #     CustomNormalize(mean=[0.5], std=[0.5])
-    # ])
     transform_train = transforms.Compose([
-        transforms.RandomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),  # 3 is bicubic
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485], std=[0.229])])
-
+        CustomResizedCrop(args.input_size, scale=(0.2, 1.0), interpolation=3),
+        CustomHorizontalFlip(p=0.5),
+        CustomToTensor(),
+        transforms.Normalize(mean=[0.5], std=[0.5])
+    ])
     dataset_train = CustomDataset(data_path=os.path.join(args.data_path, 'train'), transform=transform_train)
     print(dataset_train)
 

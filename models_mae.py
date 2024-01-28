@@ -151,6 +151,9 @@ class MaskedAutoencoderViT(nn.Module):
 
     def forward_encoder(self, x, mask_ratio):
         # embed patches
+        print(f"Shape of input tensor: {x.shape}")
+        B, C, H, W = x.shape
+
         x = self.patch_embed(x)
 
         # add pos embed w/o cls token
