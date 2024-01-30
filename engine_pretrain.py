@@ -26,6 +26,7 @@ def train_one_epoch(model: torch.nn.Module,
     model.train(True)
     metric_logger = misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
+    metric_logger.add_meter('grad_norm', misc.SmoothedValue(window_size=1, fmt='{value:.2f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 20
 
@@ -54,14 +55,23 @@ def train_one_epoch(model: torch.nn.Module,
             sys.exit(1)
 
         loss /= accum_iter
-        loss_scaler(loss, optimizer, parameters=model.parameters(),
+        norm = loss_scaler(loss, optimizer, parameters=model.parameters(),
                     update_grad=(data_iter_step + 1) % accum_iter == 0)
         if (data_iter_step + 1) % accum_iter == 0:
             optimizer.zero_grad()
 
         # torch.cuda.synchronize()
 
+        # # Compute gradient norm
+        # total_norm = 0
+        # for p in model.parameters():
+        #     if p.grad is not None:
+        #         param_norm = p.grad.data.norm(2)
+        #         total_norm += param_norm.item() ** 2
+        # total_norm = total_norm ** 0.5
         metric_logger.update(loss=loss_value)
+
+        metric_logger.update(grad_norm=norm)
 
         lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(lr=lr)
@@ -83,6 +93,11 @@ def train_one_epoch(model: torch.nn.Module,
             epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
             log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
+
+            # Log gradient norm to TensorBoard
+            # log_writer.add_scalar('Gradient Norm', grad_norm_value_reduce, global_step=epoch_1000x)
+            log_writer.add_scalar('Gradient Norm', norm, global_step=epoch_1000x)
+
             # log_writer.add_scalar('precision', precision, epoch_1000x)
             # log_writer.add_scalar('recall', recall, epoch_1000x)
             # log_writer.add_scalar('f1', f1, epoch_1000x)
