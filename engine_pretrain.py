@@ -66,6 +66,15 @@ def train_one_epoch(model: torch.nn.Module,
         lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(lr=lr)
 
+        # precision = acc_dict["precision"]
+        # metric_logger.update(precision=precision)
+        #
+        # recall = acc_dict["recall"]
+        # metric_logger.update(recall=recall)
+        #
+        # f1 = acc_dict["f1"]
+        # metric_logger.update(f1=f1)
+
         loss_value_reduce = misc.all_reduce_mean(loss_value)
         if log_writer is not None and (data_iter_step + 1) % accum_iter == 0:
             """ We use epoch_1000x as the x-axis in tensorboard.
@@ -74,6 +83,9 @@ def train_one_epoch(model: torch.nn.Module,
             epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
             log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
+            # log_writer.add_scalar('precision', precision, epoch_1000x)
+            # log_writer.add_scalar('recall', recall, epoch_1000x)
+            # log_writer.add_scalar('f1', f1, epoch_1000x)
 
 
     # gather the stats from all processes

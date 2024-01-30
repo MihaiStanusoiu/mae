@@ -37,7 +37,7 @@ class MyDataset(Dataset):
         image = image.unsqueeze(0)  # CHW
         C, H, W = image.shape
         image = image.expand(3, H, W)
-        print('5. image shape after add channel in axis 0:', image.shape)
+        # print('5. image shape after add channel in axis 0:', image.shape)
         fore_num = float((image == 0).sum())
         back_num = float((image == 255).sum())
         self.fore_num_sum = self.fore_num_sum + fore_num
@@ -111,18 +111,18 @@ if __name__ == '__main__':
     val_dataset = get_dataset(mode='val')
     dataloader = get_dataloader(train_dataset, batch_size=2)
 
-    print(len(train_dataset))
-    print(len(val_dataset))
+    # print(len(train_dataset))
+    # print(len(val_dataset))
 
     image, label = train_dataset[0]
-    print(image)
+    # print(image)
     image, label = val_dataset[0]
-    print(image)
+    # print(image)
 
     count = 1
     for imgs, labels in dataloader:
         print(imgs.shape)
-        print(labels.shape)
+        # print(labels.shape)
         # break
         # print(count
         # count = count + 1

@@ -23,7 +23,8 @@ class MaskedAutoencoderViT(nn.Module):
     """ Masked Autoencoder with VisionTransformer backbone
     """
     def __init__(self, img_size=640, patch_size=16, in_chans=3,
-                 embed_dim=1024, depth=24, num_heads=16,
+                 embed_dim=20, depth=1, num_heads=16,
+                 # embed_dim=1024, depth=24, num_heads=16,
                  decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,
                  mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False):
         super().__init__()
@@ -151,7 +152,7 @@ class MaskedAutoencoderViT(nn.Module):
 
     def forward_encoder(self, x, mask_ratio):
         # embed patches
-        print(f"Shape of input tensor: {x.shape}")
+        # print(f"Shape of input tensor: {x.shape}")
         B, C, H, W = x.shape
 
         x = self.patch_embed(x)
