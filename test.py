@@ -5,6 +5,8 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
+
+import dataset
 import models_mae
 import cv2
 
@@ -83,27 +85,38 @@ if __name__ == '__main__':
     # img = Image.open(requests.get(img_url, stream=True).raw)
 
     # please add the path of your own image in 'path'
-    img = cv2.imread('path')
-    print(img.shape)
-    img = cv2.resize(img, (224, 224))
-    img = img / 255.
-    assert img.shape == (224, 224, 3)
-
+    img = cv2.imread('test.jpg')
+    transforms = dataset.Compose()
+    # img = img - imagenet_mean
+    # img = img / imagenet_std
+    processed_im = transforms(img)
     # normalize by ImageNet mean and std
-    img = img - imagenet_mean
-    img = img / imagenet_std
+
+
+    image = processed_im.astype('float32')
+    image = torch.tensor(np.array(image))
+    # print('4.image shape after change to tensor:', image.shape)
+    image = image.unsqueeze(0)  # CHW
+    C, H, W = image.shape
+    x = image.expand(3, H, W)
+    x = x.permute(1, 2, 0)
+    image = x.squeeze(0)
+
+    # print(img.shape)
+    # img = cv2.resize(img, (224, 224))
+    # img = img / 255.
+    # assert img.shape == (224, 224, 3)
 
     plt.rcParams['figure.figsize'] = [5, 5]
-    img = torch.tensor((img))
     # show_image(torch.tensor(img))
 
     #Load a pre-trained MAE model
     # chkpt_dir = 'mae_visualize_vit_large.pth'
-    chkpt_dir = 'mae_visualize_vit_large_ganloss.pth'
+    chkpt_dir = './output_dir/checkpoint-1.pth'
     model_mae = prepare_model(chkpt_dir, 'mae_vit_large_patch16')
     print('Model loaded.')
 
     # make random mask reproducible (comment out to make it change)
     torch.manual_seed(2)
     print('MAE with pixel reconstruction:')
-    run_one_image(img, model_mae)
+    run_one_image(image, model_mae)

@@ -122,7 +122,7 @@ if __name__ == '__main__':
     count = 1
     for imgs, labels in dataloader:
         print(imgs.shape)
-        # print(labels.shape)
+        # print(labels.shape)q
         # break
         # print(count
         # count = count + 1
